@@ -1,5 +1,3 @@
-use alloc::vec::Vec;
-
 use syunit::*;
 
 use crate::{StepperData, StepperController, MicroSteps};

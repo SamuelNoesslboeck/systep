@@ -1,8 +1,5 @@
 use core::sync::atomic::Ordering::Relaxed;
-
-use alloc::boxed::Box;
-use alloc::sync::Arc;
-use alloc::vec::Vec;
+use std::sync::Arc;
 
 use syunit::*;
 use syunit::metric::*;

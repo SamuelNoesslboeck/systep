@@ -1,7 +1,4 @@
 #![crate_name = "systep"]
-#![no_std]
-
-extern crate alloc;
 
 use core::ops::{Div, Mul};
 use core::sync::atomic::AtomicBool;

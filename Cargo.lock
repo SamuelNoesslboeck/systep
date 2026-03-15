@@ -99,6 +99,7 @@ name = "systep"
 version = "0.1.0"
 dependencies = [
  "atomic_float",
+ "embedded-hal",
  "serde",
  "syact",
  "sykin",
