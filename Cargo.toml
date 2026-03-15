@@ -1,0 +1,15 @@
+[package]
+name = "systep"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+atomic_float = "1.1.0"
+serde = { version = "1.0.228", features = ["derive"] }
+syact = { git = "https://github.com/SamuelNoesslboeck/syact" }
+sykin = "0.1.0"
+syunit = "0.4.0"
+
+[[test]]
+name = "main_tests"
+path = "tests/mod.rs"
