@@ -186,35 +186,6 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                 self._limit_max = max;
             }
 
-            // TODO: Make a new output type, horrible idea to wrap all information into a single unit
-            fn resolve_pos_limits_for_abs_pos(&self, pos : PositionRad) -> Radians {
-                if let Some(ang) = self.limit_min() {
-                    if pos < ang {
-                        pos - ang
-                    } else {
-                        if let Some(ang) = self.limit_max() {
-                            if pos > ang {
-                                pos - ang
-                            } else { 
-                                Radians::ZERO 
-                            }
-                        } else {
-                            Radians::ZERO
-                        }
-                    }
-                } else {
-                    if let Some(ang) = self.limit_max() {
-                        if pos > ang {
-                            pos - ang
-                        } else { 
-                            Radians::ZERO 
-                        }
-                    } else {
-                        Radians::NAN
-                    }
-                }
-            }
-
             fn set_endpos(&mut self, overwrite_abs_pos : PositionRad) {
                 self.overwrite_abs_pos(overwrite_abs_pos);
 
