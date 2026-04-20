@@ -10,7 +10,7 @@ use crate::ControllerData;
 /// A controller for the logics of a stepper motor
 pub trait StepperController {
     /// Initializes a step with the given `time`
-    fn step(&mut self, time : Seconds) -> Result<(), ActuatorError<Rotary>>;
+    async fn step(&mut self, time : Seconds) -> Result<(), ActuatorError<Rotary>>;
 
     /// The movement direction of the motor
     fn dir(&self) -> Direction;
@@ -18,16 +18,16 @@ pub trait StepperController {
     /// Sets the direction of the motor
     fn set_dir(&mut self, dir : Direction) -> Result<(), ActuatorError<Rotary>>;
 
+    /// Getter for the controller data used
     fn data(&self) -> &ControllerData;
 }
 
 #[derive(Clone, Debug)]
 pub struct GenericPulseCtrl<D : OutputPin, P : OutputPin> {
-    _data : ControllerData,
-
     pub pin_dir : D,
     pub pin_pul : P,
 
+    _data : ControllerData,
     _dir : Direction
 }
 
@@ -64,7 +64,7 @@ impl<D : OutputPin, P : OutputPin> StepperController for GenericPulseCtrl<D, P> 
         Ok(())
     }
     
-    fn step(&mut self, time : Seconds) -> Result<(), ActuatorError<Rotary>> {
+    async fn step(&mut self, time : Seconds) -> Result<(), ActuatorError<Rotary>> {
         let half_time : Duration = (time / 2.0).into();
 
         self.pin_pul.set_high().unwrap();       // TODO: Improve pulse algorithm

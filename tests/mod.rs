@@ -1,4 +1,86 @@
-#[test]
-fn lib_usage() {
-    
+#![allow(non_snake_case)]
+
+use syact::{AdvancedActuator, SyncActuator};
+use systep::builder::{ComplexBuilder, StartStopBuilder};
+use systep::{MicroSteps, StepperActuator, StepperConfig, StepperController, StepperData, StepperMotor};
+use syunit::metric::{KgMeter2, NewtonMeters};
+use syunit::{Direction, Factor, Radians, Seconds};
+
+pub const TEST_DATA : StepperData = StepperData {
+    default_current: 1.0,
+    inductance: 0.004,
+    inertia_motor: KgMeter2(0.000_01),
+
+    number_steps: 200,
+    resistance: 4.0,
+    torque_stall: NewtonMeters(0.40)
+}; 
+
+#[derive(Debug)]
+pub struct SimulatedCtrl {
+    pub step_list : Vec<Seconds>,
+    pub dir_list : Vec<(usize, Direction)>,
+
+    __dir : Direction
+}
+
+impl SimulatedCtrl {
+    pub fn new() -> Self {
+        Self {
+            step_list: Vec::new(),
+            dir_list: Vec::new(),
+
+            __dir: Default::default()
+        }
+    }
+}
+
+impl StepperController for SimulatedCtrl {
+    async fn step(&mut self, time : syunit::Seconds) -> Result<(), syact::ActuatorError<syunit::Rotary>> {
+        self.step_list.push(time);
+        Ok(())
+    }
+
+    fn dir(&self) -> syunit::Direction {
+        self.__dir
+    }
+
+    fn set_dir(&mut self, dir : syunit::Direction) -> Result<(), syact::ActuatorError<syunit::Rotary>> {
+        self.__dir = dir;
+        self.dir_list.push((self.step_list.len(), dir));
+        Ok(())
+    }
+
+    fn data(&self) -> &systep::ControllerData {
+        todo!()
+    }
+}
+
+pub type StartStopStepper = StepperMotor<StartStopBuilder, SimulatedCtrl>;
+pub type ComplexStepper = StepperMotor<ComplexBuilder, SimulatedCtrl>;
+
+#[tokio::test]
+async fn test__start_stop_builder() {
+    let mut motor = StartStopStepper::new_advanced(
+        SimulatedCtrl::new(), TEST_DATA, StepperConfig::VOLT12_NO_OVERLOAD
+    ).unwrap();
+
+    motor.drive_rel(Radians(1.0), Factor::MAX).await.unwrap();
+
+    dbg!(motor.ctrl);
+}
+
+#[tokio::test]
+async fn test__complex_builder() {
+    let mut motor = ComplexStepper::new_advanced(
+        SimulatedCtrl::new(), TEST_DATA, StepperConfig::VOLT12_NO_OVERLOAD
+    ).unwrap();
+
+    motor.set_microsteps(MicroSteps::HALF).unwrap();
+    motor.apply_gen_force(NewtonMeters(0.1)).unwrap();
+    motor.apply_inertia(KgMeter2(0.001)).unwrap();
+    motor.drive_rel(Radians(1.0), Factor::MAX).await.unwrap();
+
+    dbg!(motor.builder);
+    dbg!(motor.ctrl);
 }

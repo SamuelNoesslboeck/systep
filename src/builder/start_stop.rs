@@ -313,7 +313,7 @@ impl StepperBuilder for StartStopBuilder {
 
 
             fn set_overload_curret(&mut self, current : Option<f32>) -> Result<(), ActuatorError> {
-                self._config.overload_current = current;
+                self._config.max_current = current;
                 self.update_start_stop()        // Overload current affects start stop velocity, recalculate
             }
         //

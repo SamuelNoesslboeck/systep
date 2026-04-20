@@ -21,7 +21,7 @@ use crate::{MicroSteps, StepperController, StepperConfig, StepperData};
 
 // Constants
     /// The maximum speed level that is used by default
-    pub const DEFAULT_MAX_SPEED_LEVEL : usize = 10;
+    pub const DEFAULT_MAX_SPEED_LEVEL : usize = 10;     // TODO: Remove
 // 
 
 /// The drive-mode of the stepper motor

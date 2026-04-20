@@ -1,4 +1,5 @@
 #![crate_name = "systep"]
+#![allow(async_fn_in_trait)]
 
 use core::ops::{Div, Mul};
 use core::sync::atomic::AtomicBool;

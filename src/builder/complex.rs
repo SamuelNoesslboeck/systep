@@ -64,6 +64,7 @@ impl ComplexBuilder {
 
         // Iterate to max speed level or until the cap is reached
         for _ in 0 .. max_speed_level {
+            // Determine the maximum possible acceleration
             let mut accel_possible = self.acceleration_possible(velocity_current)?;
 
             // Do without jolt first
@@ -423,7 +424,7 @@ impl AdvancedStepperBuilder for ComplexBuilder {
         }
 
         fn set_overload_curret(&mut self, current : Option<f32>) -> Result<(), ActuatorError> {
-            self._config.overload_current = current;
+            self._config.max_current = current;
             self.update()
         }
     // 

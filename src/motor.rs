@@ -4,18 +4,18 @@ use std::sync::Arc;
 use syunit::*;
 use syunit::metric::*;
 
-use syact::{SyncActuator, SyncActuatorBlocking, InterruptReason, Interruptible, Interruptor, AdvancedActuator, DefinedActuator, ActuatorError};
+use syact::{ActuatorError, AdvancedActuator, DefinedActuator, InterruptReason, Interruptible, Interruptor, SyncActuator};
 use syact::sync::SyncActuatorState;
 
-use crate::{StepperActuator, StepperController, StepperState, MicroSteps, StepperData, StepperConfig};
+use crate::{MicroSteps, StepperActuator, StepperConfig, StepperController, StepperData, StepperState};
 use crate::builder::{AdvancedStepperBuilder, SimpleStepperBuilder, StepperBuilder, StepperDriveMode};
 
 /// A stepper motor
 /// 
 /// Controlled by two pins, one giving information about the direction, the other about the step signal (PWM)
 pub struct StepperMotor<B : StepperBuilder, C : StepperController> {
-    builder : B,
-    ctrl : C, 
+    pub builder : B,
+    pub ctrl : C, 
 
     _state: Arc<StepperState>,
 
@@ -35,11 +35,7 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
     /// ######################################
     ///
     /// Main driving algorithm for stepper motors, handles the builder until no nodes are left anymore
-    /// 
-    /// ## Thread
-    /// 
-    /// Blocks the current thread and creates the step signals until the builder is finished
-    pub fn handle_builder(&mut self) -> Result<(), ActuatorError> {
+    pub async fn handle_builder(&mut self) -> Result<(), ActuatorError> {
         // Update the movement variable of the state
         self._state._moving.store(false, Relaxed);
         
@@ -76,7 +72,7 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
             }
 
             // Make step and return error if occured
-            self.ctrl.step(node)?;
+            self.ctrl.step(node).await?;
 
             // Check if the pos value exeeds any limits, stop the movement if it does
             if direction.as_bool() {
@@ -197,39 +193,33 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                 )
             }
         //
-    }
 
-    impl<B : StepperBuilder, C : StepperController> SyncActuatorBlocking for StepperMotor<B, C> {
         // State
-            fn state(&self) -> &dyn SyncActuatorState {
-                self._state.as_ref()
-            }
-
             fn clone_state(&self) -> Arc<dyn SyncActuatorState> {
                 self._state.clone()
             }
         // 
 
-        fn drive_rel_blocking(&mut self, rel_dist : Radians, speed_f : Factor) -> Result<(), ActuatorError> {
+        async fn drive_rel(&mut self, rel_dist : Radians, speed_f : Factor) -> Result<(), ActuatorError> {
             if !rel_dist.is_finite() {
                 return Err(ActuatorError::InvaldRelativeDistance(rel_dist));
             }
 
             // Set drive mode, return mapped error if one occurs
             self.builder.set_drive_mode(StepperDriveMode::FixedDistance(rel_dist, RadPerSecond::ZERO, speed_f), &mut self.ctrl)?;
-            self.handle_builder()
+            self.handle_builder().await
         }
 
-        fn drive_factor(&mut self, speed : Factor, direction : Direction) -> Result<(), ActuatorError> {
+        async fn drive_factor(&mut self, speed : Factor, direction : Direction) -> Result<(), ActuatorError> {
             // Set drive mode, return mapped error if one occurs
             self.builder.set_drive_mode(StepperDriveMode::ConstFactor(speed, direction), &mut self.ctrl)?;
-            self.handle_builder()
+            self.handle_builder().await
         }
     
-        fn drive_speed(&mut self, speed : RadPerSecond) -> Result<(), ActuatorError> {
+        async fn drive_speed(&mut self, speed : RadPerSecond) -> Result<(), ActuatorError> {
             // Set drive mode, return mapped error if one occurs
             self.builder.set_drive_mode(StepperDriveMode::ConstVelocity(speed), &mut self.ctrl)?;
-            self.handle_builder()
+            self.handle_builder().await
         }
     }
 // 
@@ -304,27 +294,25 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
             }
         //
     }
-// 
 
-impl<B : StepperBuilder, C : StepperController> StepperActuator for StepperMotor<B, C> 
-where
-    B : DefinedActuator
-{
-    // Data
-        fn microsteps(&self) -> MicroSteps {
-            self.builder.microsteps()
+    
+    impl<B : StepperBuilder, C : StepperController> StepperActuator for StepperMotor<B, C> {
+        // Data
+            fn microsteps(&self) -> MicroSteps {
+                self.builder.microsteps()
+            }
+
+            fn set_microsteps(&mut self, microsteps : MicroSteps) -> Result<(), ActuatorError> {
+                self.builder.set_microsteps(microsteps)
+                
+            }
+        //
+
+        fn step_dist(&self) -> Radians {
+            self.builder.step_angle()
         }
-
-        fn set_microsteps(&mut self, microsteps : MicroSteps) -> Result<(), ActuatorError> {
-            self.builder.set_microsteps(microsteps)
-            
-        }
-    //
-
-    fn step_dist(&self) -> Radians {
-        self.builder.step_angle()
     }
-}
+//
 
 impl<B : StepperBuilder, C : StepperController> Interruptible for StepperMotor<B, C> {
     // Interruptors

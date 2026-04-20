@@ -13,6 +13,15 @@ use syact::data::ActuatorVars;
 pub struct MicroSteps(u8);
 
 impl MicroSteps {
+    /// Halfing the A-Phases, leading to twice as many steps
+    pub const HALF_A : Self = Self(2);
+    /// Halfing the B-Phases, leading to twice as many steps
+    pub const HALF_B : Self = Self(2);
+    /// Halfing both phases, leading to 4 microsteps
+    pub const HALF : Self = Self(4);
+    /// Quatering both phases, leading to 16 microsteps
+    pub const QUATER : Self = Self(16);
+
     /// Get the representing `u8` value
     pub fn as_u8(self) -> u8 {
         self.0
@@ -58,40 +67,53 @@ impl Mul<MicroSteps> for u64 {
 }
 
 /// Stores data for generic components 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StepperConfig {
     /// Supply voltage of the components in Volts
     pub voltage : f32,
 
-    /// Overload current of the stepper, can increase torque
-    pub overload_current : Option<f32>
+    /// Maximum current of the stepper, can adjust torque
+    pub max_current : Option<f32>
 }
 
 impl StepperConfig {
     /// The stepper is using 12 Volts and its rated current
     pub const VOLT12_NO_OVERLOAD : Self = Self {
         voltage: 12.0,
-        overload_current: None
+        max_current: None
     }; 
 
     /// The stepper is using 24 Volts and its rated current
     pub const VOLT24_NO_OVERLOAD : Self = Self {
         voltage: 24.0,
-        overload_current: None
+        max_current: None
+    };
+
+    /// The stepper is using 36 Volts and its rated current
+    pub const VOLT36_NO_OVERLOAD : Self = Self {
+        voltage: 36.0,
+        max_current: None
     };
 
     /// The stepper is using 48 Volts and its rated current
     pub const VOLT48_NO_OVERLOAD : Self = Self {
         voltage: 48.0,
-        overload_current: None
+        max_current: None
     };
 
     /// Creates a new StepperConfig instance
-    #[inline(always)]
+    /// 
+    /// ### Panic
+    /// 
+    /// Panics if a value smaller than or equal to `0.0` has been provided
     pub fn new(voltage : f32, overload_current : Option<f32>) -> Self {
+        if voltage <= 0.0 {
+            panic!("Voltage cannot be smaller than or equal to 0.0!");
+        }
+
         Self { 
             voltage,
-            overload_current
+            max_current: overload_current
         }
     }
 }
@@ -130,7 +152,7 @@ pub struct StepperData {
 impl StepperData {
     // Constants
         /// ### Stepper motor 17HE15-1504S
-        /// Values for standard stepper motor, see <https://github.com/SamuelNoesslboeck/syact/docs/datasheets/17HE15_1504S.pdf>
+        /// Values for standard stepper motor
         pub const MOT_17HE15_1504S : Self = Self {
             default_current: 1.5, 
             inductance: 0.004, 
@@ -185,13 +207,13 @@ impl StepperData {
             }
             
             if velocity == RadPerSecond::ZERO {
-                return self.torque_overload(config.overload_current);
+                return self.torque_overload(config.max_current);
             }
 
             let time = self.full_step_time(velocity);
             let pow = core::f32::consts::E.powf(time / self.tau(config.voltage));
 
-            self.torque_overload(config.overload_current) * (pow - 1.0) / (pow + 1.0)
+            self.torque_overload(config.max_current) * (pow - 1.0) / (pow + 1.0)
         }
     // 
 
@@ -224,7 +246,7 @@ impl StepperData {
 
         /// Returns the start-stop-velocity for a stepper motor
         pub fn velocity_start_stop(&self, vars : &ActuatorVars, config : &StepperConfig, microsteps : MicroSteps) -> Option<RadPerSecond> {
-            vars.force_after_load_lower(self.torque_overload(config.overload_current)).map(|torque| {
+            vars.force_after_load_lower(self.torque_overload(config.max_current)).map(|torque| {
                 RadPerSecond((torque.0 / vars.inertia_after_load(self.inertia_motor).0 * core::f32::consts::PI / (self.number_steps * microsteps) as f32).sqrt())
             })
         }
