@@ -1,5 +1,5 @@
-use core::sync::atomic::Ordering::Relaxed;
-use std::sync::Arc;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 use syunit::*;
 use syunit::metric::*;
@@ -7,7 +7,7 @@ use syunit::metric::*;
 use syact::{ActuatorError, AdvancedActuator, DefinedActuator, InterruptReason, Interruptible, Interruptor, SyncActuator};
 use syact::sync::SyncActuatorState;
 
-use crate::{MicroSteps, StepperActuator, StepperConfig, StepperController, StepperData, StepperState};
+use crate::{MicroSteps, StepperActuator, StepperConfig, StepperController, StepperData, StepperState, builder};
 use crate::builder::{AdvancedStepperBuilder, SimpleStepperBuilder, StepperBuilder, StepperDriveMode};
 
 /// A stepper motor
@@ -17,7 +17,7 @@ pub struct StepperMotor<B : StepperBuilder, C : StepperController> {
     pub builder : B,
     pub ctrl : C, 
 
-    _state: Arc<StepperState>,
+    moving : bool,    
 
     // Limits
     _limit_min : Option<PositionRad>,
@@ -36,8 +36,8 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
     ///
     /// Main driving algorithm for stepper motors, handles the builder until no nodes are left anymore
     pub async fn handle_builder(&mut self) -> Result<(), ActuatorError> {
-        // Update the movement variable of the state
-        self._state._moving.store(false, Relaxed);
+        // Update the movement variable
+
         
         // Iterate through the builder until no nodes are left
         while let Some(node) = self.builder.next() {

@@ -1,5 +1,6 @@
 #![crate_name = "systep"]
 #![allow(async_fn_in_trait)]
+#![no_std]
 
 use core::ops::{Div, Mul};
 use core::sync::atomic::AtomicBool;
@@ -9,6 +10,9 @@ use atomic_float::AtomicF32;
 
 use syact::{ActuatorError, SyncActuator, SyncActuatorState, RatioActuatorParent};
 use syunit::*;
+
+// Using diffent global allocator
+extern crate alloc;
 
 // ####################
 // #    SUBMODULES    #
