@@ -3,12 +3,8 @@
 #![no_std]
 
 use core::ops::{Div, Mul};
-use core::sync::atomic::AtomicBool;
-use core::sync::atomic::Ordering::Relaxed;
 
-use atomic_float::AtomicF32;
-
-use syact::{ActuatorError, SyncActuator, SyncActuatorState, RatioActuatorParent};
+use syact::{ActuatorError, SyncActuator, RatioActuatorParent};
 use syunit::*;
 
 // Using diffent global allocator
@@ -82,51 +78,6 @@ extern crate alloc;
 
         fn step_dist(&self) -> <T::Input as UnitSet>::Distance {
             self.dist_for_parent(self.child().step_dist())
-        }
-    }
-// 
-
-// ######################
-// #    StepperState    #
-// ######################
-    /// The state of a stepper motor, whether it is driving etc.
-    pub struct StepperState {
-        /// Atomic `Radians`
-        _abs_pos : AtomicF32,
-        _moving : AtomicBool,
-
-        should_halt : AtomicBool,
-        should_interrupt : AtomicBool
-    }
-
-    impl StepperState {
-        /// Creates a new `StepperState`
-        pub fn new() -> Self {
-            StepperState {
-                _abs_pos: AtomicF32::new(Radians::ZERO.0),
-                _moving: AtomicBool::new(false),
-
-                should_halt : AtomicBool::new(false),
-                should_interrupt : AtomicBool::new(false)
-            }
-        }
-    }
-
-    impl SyncActuatorState<Rotary> for StepperState {
-        fn pos(&self) -> PositionRad {
-            PositionRad(self._abs_pos.load(Relaxed))
-        }
-
-        fn moving(&self) -> bool {
-            self._moving.load(Relaxed)
-        }
-
-        fn halt(&self) {
-            self.should_halt.store(true, Relaxed);
-        }
-
-        fn interrupt(&self) {
-            self.should_interrupt.store(true, Relaxed);
         }
     }
 // 

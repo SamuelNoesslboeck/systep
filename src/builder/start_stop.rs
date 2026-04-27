@@ -41,6 +41,8 @@ pub struct StartStopBuilder {
     _direction : Direction,
     mode : StepperDriveMode,
 
+    _velocity : RadPerSecond,
+
     // Step counters
     distance : u64,
     distance_counter : u64
@@ -124,7 +126,6 @@ impl Iterator for StartStopBuilder {
 }
 
 impl StepperBuilder for StartStopBuilder {
-
     // Data
         fn microsteps(&self) -> MicroSteps {
             self._microsteps
@@ -147,6 +148,10 @@ impl StepperBuilder for StartStopBuilder {
     // 
 
     // RadPerSecond
+        fn velocity(&self) -> RadPerSecond {
+            self._velocity
+        }
+
         #[inline]
         fn velocity_max(&self) -> Option<RadPerSecond> {
             self._velocity_max
@@ -278,6 +283,8 @@ impl StepperBuilder for StartStopBuilder {
                     _direction: Direction::default(),
                     _microsteps: MicroSteps::default(),
                     mode: StepperDriveMode::Inactive,
+
+                    _velocity: RadPerSecond::ZERO,
     
                     distance: 0,
                     distance_counter: 0,

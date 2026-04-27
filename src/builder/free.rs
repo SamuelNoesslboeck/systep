@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use syunit::*;
 
 use crate::{StepperData, StepperController, MicroSteps};
@@ -37,6 +39,8 @@ pub struct FreeBuilder {
     times : Vec<Seconds>,
     max_speed_level : Option<usize>,
     current_speed_level : usize,
+
+    _velocity : RadPerSecond,
 
     distance : u64,
     distance_counter : u64
@@ -203,6 +207,8 @@ impl Iterator for FreeBuilder {
             }
         }
 
+        self._velocity = vel_opt.unwrap_or_default();
+
         vel_opt.map(|vel| self.consts.step_time(vel, self._microsteps))
     }
 }
@@ -230,7 +236,11 @@ impl StepperBuilder for FreeBuilder {
         }
     // 
 
-    // RadPerSecond
+    /* Velocity */
+        fn velocity(&self) -> RadPerSecond {
+            self._velocity
+        }
+
         #[inline]
         fn velocity_max(&self) -> Option<RadPerSecond> {
             self._velocity_max
@@ -249,9 +259,9 @@ impl StepperBuilder for FreeBuilder {
                 Ok(())
             }
         }
-    //
+    /**/
 
-    // RadPerSecond2
+    /* Acceleration */
         #[inline]
         fn acceleration_max(&self) -> Option<RadPerSecond2> {
             self._acceleration_max   
@@ -270,7 +280,7 @@ impl StepperBuilder for FreeBuilder {
                 Ok(())
             }
         }
-    // 
+    /**/
 
     // RadPerSecond3 
         #[inline]

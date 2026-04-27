@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use syunit::*;
 use syunit::metric::*;
 
@@ -43,6 +45,8 @@ pub struct ComplexBuilder {
     times : Vec<Seconds>,
     max_speed_level : Option<usize>,
     current_speed_level : usize,
+
+    last_vel : RadPerSecond,
 
     distance : u64,
     distance_counter : u64
@@ -213,6 +217,8 @@ impl Iterator for ComplexBuilder {
             }
         }
 
+        self.last_vel = vel_opt.unwrap_or_default();
+
         vel_opt.map(|vel| self._consts.step_time(vel, self._microsteps))
     }
 }
@@ -240,7 +246,11 @@ impl StepperBuilder for ComplexBuilder {
         }
     // 
 
-    // RadPerSecond
+    // Velocity
+        fn velocity(&self) -> RadPerSecond {
+            self.last_vel
+        }
+
         #[inline]
         fn velocity_max(&self) -> Option<RadPerSecond> {
             self._velocity_max
@@ -393,6 +403,8 @@ impl AdvancedStepperBuilder for ComplexBuilder {
                 speed_levels: Vec::new(),
                 max_speed_level: None,
                 current_speed_level: 0,
+
+                last_vel: RadPerSecond::ZERO,
 
                 _consts: consts
             };

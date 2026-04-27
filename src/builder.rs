@@ -64,6 +64,9 @@ pub trait StepperBuilder : Iterator<Item = Seconds> {
     // 
 
     // Velocity
+        /// Returns the current velocity
+        fn velocity(&self) -> RadPerSecond;
+
         /// Maximum velocity allowed by the user if specified
         fn velocity_max(&self) -> Option<RadPerSecond>;
 

@@ -1,5 +1,4 @@
-use core::time::Duration;
-
+use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
 
 use syact::ActuatorError;
@@ -23,28 +22,32 @@ pub trait StepperController {
 }
 
 #[derive(Clone, Debug)]
-pub struct GenericPulseCtrl<D : OutputPin, P : OutputPin> {
+pub struct GenericPulseCtrl<D : OutputPin, P : OutputPin, T : DelayNs> {
     pub pin_dir : D,
     pub pin_pul : P,
+
+    timer : T,
 
     _data : ControllerData,
     _dir : Direction
 }
 
-impl<D : OutputPin, P : OutputPin> GenericPulseCtrl<D, P> {
-    pub fn new(data : ControllerData, pin_dir : D, pin_pul : P) -> Self {
+impl<D : OutputPin, P : OutputPin, T : DelayNs> GenericPulseCtrl<D, P, T> {
+    pub fn new(data : ControllerData, pin_dir : D, pin_pul : P, timer : T) -> Self {
         Self {
             _data: data,
 
             pin_dir,
             pin_pul,
 
+            timer,
+
             _dir: Direction::default()
         }
     }
 }
 
-impl<D : OutputPin, P : OutputPin> StepperController for GenericPulseCtrl<D, P> {
+impl<D : OutputPin, P : OutputPin, T : DelayNs> StepperController for GenericPulseCtrl<D, P, T> {
     fn dir(&self) -> Direction {
         self._dir
     }
@@ -65,12 +68,12 @@ impl<D : OutputPin, P : OutputPin> StepperController for GenericPulseCtrl<D, P> 
     }
     
     async fn step(&mut self, time : Seconds) -> Result<(), ActuatorError<Rotary>> {
-        let half_time : Duration = (time / 2.0).into();
+        let half_time : u32 = ((time / 2.0) * 1_000_000.0).0 as u32;
 
-        self.pin_pul.set_high().unwrap();       // TODO: Improve pulse algorithm
-        std::thread::sleep(half_time);
+        self.pin_pul.set_high().unwrap();       // TODO: Improve pulse algorithm and delay implementation
+        self.timer.delay_us(half_time);
         self.pin_pul.set_low().unwrap();
-        std::thread::sleep(half_time);
+        self.timer.delay_us(half_time);
 
         Ok(())
     }

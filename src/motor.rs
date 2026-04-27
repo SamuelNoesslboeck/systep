@@ -5,9 +5,8 @@ use syunit::*;
 use syunit::metric::*;
 
 use syact::{ActuatorError, AdvancedActuator, DefinedActuator, InterruptReason, Interruptible, Interruptor, SyncActuator};
-use syact::sync::SyncActuatorState;
 
-use crate::{MicroSteps, StepperActuator, StepperConfig, StepperController, StepperData, StepperState, builder};
+use crate::{MicroSteps, StepperActuator, StepperConfig, StepperController, StepperData};
 use crate::builder::{AdvancedStepperBuilder, SimpleStepperBuilder, StepperBuilder, StepperDriveMode};
 
 /// A stepper motor
@@ -18,6 +17,7 @@ pub struct StepperMotor<B : StepperBuilder, C : StepperController> {
     pub ctrl : C, 
 
     moving : bool,    
+    _pos : PositionRad,
 
     // Limits
     _limit_min : Option<PositionRad>,
@@ -37,7 +37,7 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
     /// Main driving algorithm for stepper motors, handles the builder until no nodes are left anymore
     pub async fn handle_builder(&mut self) -> Result<(), ActuatorError> {
         // Update the movement variable
-
+        self.moving = true;
         
         // Iterate through the builder until no nodes are left
         while let Some(node) = self.builder.next() {
@@ -59,7 +59,7 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                     }
 
                     // Checks if the interruptor has been triggered
-                    if let Some(reason) = intr.check(self._state.pos()) {
+                    if let Some(reason) = intr.check(self._pos) {
                         intr.set_temp_dir(Some(direction));
                         self._intr_reason.replace(reason);
                         
@@ -76,14 +76,16 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
 
             // Check if the pos value exeeds any limits, stop the movement if it does
             if direction.as_bool() {
-                self._state._abs_pos.fetch_add(self.builder.step_angle().0, Relaxed);
+                self._pos += self.builder.step_angle(); 
 
+                // Stop the motor if the limit is exceeded
                 if self.pos() > self.limit_max().unwrap_or(PositionRad::INFINITY) {
                     self.builder.set_drive_mode(StepperDriveMode::Stop, &mut self.ctrl)?;
                 } 
             } else {
-                self._state._abs_pos.fetch_sub(self.builder.step_angle().0, Relaxed);
+                self._pos -= self.builder.step_angle(); 
 
+                // Stop the motor if the limit is exceeded
                 if self.pos() < self.limit_min().unwrap_or(PositionRad::NEG_INFINITY) {
                     self.builder.set_drive_mode(StepperDriveMode::Stop, &mut self.ctrl)?;
                 } 
@@ -91,7 +93,7 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
         }
 
         // No movement anymore
-        self._state._moving.store(false, Relaxed);
+        self.moving = false;
 
         Ok(())
     }
@@ -109,16 +111,26 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
         // Position 
             #[inline]
             fn pos(&self) -> PositionRad {
-                self._state.pos()
+                self._pos
             }   
 
             #[inline]
             fn overwrite_abs_pos(&mut self, pos : PositionRad) {
-                self._state._abs_pos.store(pos.0, Relaxed);
+                self._pos = pos;
             }
         //
 
-        // U::Velocity
+        // State
+            fn is_moving(&self) -> bool {
+                self.moving
+            }
+        // 
+
+        // Velocity
+            fn velocity(&self) -> RadPerSecond {
+                self.builder.velocity()
+            }
+
             #[inline]
             fn velocity_max(&self) -> Option<RadPerSecond> {
                 self.builder.velocity_max()
@@ -194,12 +206,6 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
             }
         //
 
-        // State
-            fn clone_state(&self) -> Arc<dyn SyncActuatorState> {
-                self._state.clone()
-            }
-        // 
-
         async fn drive_rel(&mut self, rel_dist : Radians, speed_f : Factor) -> Result<(), ActuatorError> {
             if !rel_dist.is_finite() {
                 return Err(ActuatorError::InvaldRelativeDistance(rel_dist));
@@ -234,7 +240,8 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                 builder: B::new()?,
                 ctrl,
 
-                _state : Arc::new(StepperState::new()),
+                moving: false,
+                _pos: PositionRad::ZERO,
 
                 _limit_min: None,
                 _limit_max: None,
@@ -252,7 +259,8 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                 builder: B::new(consts, config)?,
                 ctrl,
 
-                _state : Arc::new(StepperState::new()),
+                moving: false,
+                _pos: PositionRad::ZERO,
 
                 _limit_min: None,
                 _limit_max: None,
