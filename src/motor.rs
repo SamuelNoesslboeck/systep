@@ -24,7 +24,7 @@ pub struct StepperMotor<B : StepperBuilder, C : StepperController> {
     _limit_max : Option<PositionRad>,
 
     // Interrupters
-    interruptors : Vec<Box<dyn Interruptor<Rotary> + Send>>,
+    interruptors : Vec<Box<dyn Interruptor + Send>>,
     _intr_reason : Option<InterruptReason>,
 }
 
@@ -59,7 +59,7 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                     }
 
                     // Checks if the interruptor has been triggered
-                    if let Some(reason) = intr.check(self._pos) {
+                    if let Some(reason) = intr.check() {
                         intr.set_temp_dir(Some(direction));
                         self._intr_reason.replace(reason);
                         
