@@ -1,5 +1,5 @@
-use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
+use embedded_hal_async::delay::DelayNs;
 
 use syact::ActuatorError;
 use syunit::*;
@@ -42,8 +42,13 @@ impl<D : OutputPin, P : OutputPin, T : DelayNs> GenericPulseCtrl<D, P, T> {
 
             timer,
 
-            _dir: Direction::default()
+            _dir: Direction::CW         // TODO: Implement pin setup
         }
+    }
+
+    /// The time that the pulse will be held for the stepper signal
+    pub fn pulse_time(&self) -> Seconds {
+        0.5 / self._data.max_freq 
     }
 }
 
@@ -58,9 +63,11 @@ impl<D : OutputPin, P : OutputPin, T : DelayNs> StepperController for GenericPul
 
     fn set_dir(&mut self, dir : Direction) -> Result<(), ActuatorError<Rotary>> {
         if dir.as_bool() {
-            self.pin_dir.set_high().unwrap();   // TODO: Remove
+            self.pin_dir.set_high()
+                .map_err(|_| ActuatorError::PinError)?;    
         } else {
-            self.pin_dir.set_low().unwrap();    // TODO: Remove
+            self.pin_dir.set_low()
+                .map_err(|_| ActuatorError::PinError)?;  
         }
 
         self._dir = dir;
@@ -68,12 +75,14 @@ impl<D : OutputPin, P : OutputPin, T : DelayNs> StepperController for GenericPul
     }
     
     async fn step(&mut self, time : Seconds) -> Result<(), ActuatorError<Rotary>> {
-        let half_time : u32 = ((time / 2.0) * 1_000_000.0).0 as u32;
+        self.pin_pul.set_high()
+                .map_err(|_| ActuatorError::PinError)?;    
+        self.timer.delay_ns((self.pulse_time() * 1_000_000.0).0 as u32).await;    // TODO: Improve timing functions
+        self.pin_pul.set_low()
+            .map_err(|_| ActuatorError::PinError)?;    
 
-        self.pin_pul.set_high().unwrap();       // TODO: Improve pulse algorithm and delay implementation
-        self.timer.delay_us(half_time);
-        self.pin_pul.set_low().unwrap();
-        self.timer.delay_us(half_time);
+        // Replace with better logic
+        self.timer.delay_ns(((time - self.pulse_time()) * 1_000_000.0).0 as u32).await;    // TODO: Improve timing functions
 
         Ok(())
     }

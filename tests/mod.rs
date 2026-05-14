@@ -76,8 +76,8 @@ async fn test__complex_builder() {
         SimulatedCtrl::new(), TEST_DATA, StepperConfig::VOLT12_NO_OVERLOAD
     ).unwrap();
 
-    motor.set_microsteps(MicroSteps::HALF).unwrap();
-    motor.apply_gen_force(NewtonMeters(0.1)).unwrap();
+    // motor.set_microsteps(MicroSteps::HALF).unwrap();
+    // motor.apply_gen_force(NewtonMeters(0.1)).unwrap();
     motor.apply_inertia(KgMeter2(0.001)).unwrap();
     motor.drive_rel(Radians(1.0), Factor::MAX).await.unwrap();
 

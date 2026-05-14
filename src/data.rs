@@ -121,7 +121,7 @@ impl StepperConfig {
 #[derive(Clone, Debug)]
 pub struct ControllerData {
     /// Maximum frequency that can be driven with this driver
-    pub max_freq : f32
+    pub max_freq : Hertz
 }
 
 /// A collection of the most relevant variables Unit stepper calculation 
