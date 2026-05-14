@@ -61,7 +61,7 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                     // Checks if the interruptor has been triggered
                     if let Some(reason) = intr.check() {
                         intr.set_temp_dir(Some(direction));
-                        self._intr_reason.replace(reason);
+                        self._intr_reason.replace(reason);  // Update interrupt reason to the one given by interruptor
                         
                         self.builder.set_drive_mode(StepperDriveMode::Stop, &mut self.ctrl)?; 
                     } else {
@@ -81,6 +81,7 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                 // Stop the motor if the limit is exceeded
                 if self.pos() > self.limit_max().unwrap_or(PositionRad::INFINITY) {
                     self.builder.set_drive_mode(StepperDriveMode::Stop, &mut self.ctrl)?;
+                    self._intr_reason.replace(InterruptReason::LimitReached);   // Communicate software end
                 } 
             } else {
                 self._pos -= self.builder.step_angle(); 
@@ -88,6 +89,7 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                 // Stop the motor if the limit is exceeded
                 if self.pos() < self.limit_min().unwrap_or(PositionRad::NEG_INFINITY) {
                     self.builder.set_drive_mode(StepperDriveMode::Stop, &mut self.ctrl)?;
+                    self._intr_reason.replace(InterruptReason::LimitReached);   // Communicate software end
                 } 
             }
         }
