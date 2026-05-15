@@ -1,5 +1,7 @@
+use core::time::Duration;
+
+use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
-use embedded_hal_async::delay::DelayNs;
 
 use syact::ActuatorError;
 use syunit::*;
@@ -8,8 +10,8 @@ use crate::ControllerData;
 
 /// A controller for the logics of a stepper motor
 pub trait StepperController {
-    /// Initializes a step with the given `time`
-    async fn step(&mut self, time : Seconds) -> Result<(), ActuatorError<Rotary>>;
+    /// Does a single step
+    fn step(&mut self) -> Result<(), ActuatorError<Rotary>>;
 
     /// The movement direction of the motor
     fn dir(&self) -> Direction;
@@ -19,6 +21,8 @@ pub trait StepperController {
 
     /// Getter for the controller data used
     fn data(&self) -> &ControllerData;
+
+    fn delay(&mut self, time : Duration);
 }
 
 #[derive(Clone, Debug)]
@@ -74,16 +78,19 @@ impl<D : OutputPin, P : OutputPin, T : DelayNs> StepperController for GenericPul
         Ok(())
     }
     
-    async fn step(&mut self, time : Seconds) -> Result<(), ActuatorError<Rotary>> {
+    fn step(&mut self) -> Result<(), ActuatorError<Rotary>> {
         self.pin_pul.set_high()
                 .map_err(|_| ActuatorError::PinError)?;    
-        self.timer.delay_ns((self.pulse_time() * 1_000_000.0).0 as u32).await;    // TODO: Improve timing functions
+        self.timer.delay_us((self.pulse_time() * 1_000_000.0).0 as u32);  
         self.pin_pul.set_low()
             .map_err(|_| ActuatorError::PinError)?;    
 
-        // Replace with better logic
-        self.timer.delay_ns(((time - self.pulse_time()) * 1_000_000.0).0 as u32).await;    // TODO: Improve timing functions
-
         Ok(())
+    }
+
+    fn delay(&mut self, time : Duration) {
+        self.timer.delay_us(
+            time.as_micros() as u32     // TODO: High accuracy not required here! Still improvments to be made tho!
+        );
     }
 }

@@ -1,6 +1,4 @@
 #![crate_name = "systep"]
-#![allow(async_fn_in_trait)]
-#![no_std]
 
 use core::ops::{Div, Mul};
 

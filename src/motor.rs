@@ -1,3 +1,6 @@
+use core::time::Duration;
+use std::time::Instant;
+
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
@@ -26,6 +29,9 @@ pub struct StepperMotor<B : StepperBuilder, C : StepperController> {
     // Interrupters
     interruptors : Vec<Box<dyn Interruptor + Send>>,
     _intr_reason : Option<InterruptReason>,
+
+    last_step : Instant,
+    last_step_time : Option<Seconds>
 }
 
 // Inits
@@ -35,7 +41,7 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
     /// ######################################
     ///
     /// Main driving algorithm for stepper motors, handles the builder until no nodes are left anymore
-    pub async fn handle_builder(&mut self) -> Result<(), ActuatorError> {
+    pub fn handle_builder(&mut self) -> Result<(), ActuatorError> {
         // Update the movement variable
         self.moving = true;
         
@@ -71,8 +77,23 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                 }
             }
 
+            // Wait until triggering step when the one before has not cooled down!
+            if let Some(last_node) = self.last_step_time {
+                let el = self.last_step.elapsed();
+                let node_dur : Duration = last_node.into();
+
+                // Wait if steps are made to quickly
+                if el < node_dur {
+                    self.ctrl.delay(node_dur - el);
+                }
+            }
+
             // Make step and return error if occured
-            self.ctrl.step(node).await?;
+            self.ctrl.step()?;
+
+            // Update last step
+            self.last_step = Instant::now();
+            self.last_step_time.replace(node); 
 
             // Check if the pos value exeeds any limits, stop the movement if it does
             if direction.as_bool() {
@@ -208,26 +229,26 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
             }
         //
 
-        async fn drive_rel(&mut self, rel_dist : Radians, speed_f : Factor) -> Result<(), ActuatorError> {
+        fn drive_rel(&mut self, rel_dist : Radians, speed_f : Factor) -> Result<(), ActuatorError> {
             if !rel_dist.is_finite() {
                 return Err(ActuatorError::InvaldRelativeDistance(rel_dist));
             }
 
             // Set drive mode, return mapped error if one occurs
             self.builder.set_drive_mode(StepperDriveMode::FixedDistance(rel_dist, RadPerSecond::ZERO, speed_f), &mut self.ctrl)?;
-            self.handle_builder().await
+            self.handle_builder()
         }
 
-        async fn drive_factor(&mut self, speed : Factor, direction : Direction) -> Result<(), ActuatorError> {
+        fn drive_factor(&mut self, speed : Factor, direction : Direction) -> Result<(), ActuatorError> {
             // Set drive mode, return mapped error if one occurs
             self.builder.set_drive_mode(StepperDriveMode::ConstFactor(speed, direction), &mut self.ctrl)?;
-            self.handle_builder().await
+            self.handle_builder()
         }
     
-        async fn drive_speed(&mut self, speed : RadPerSecond) -> Result<(), ActuatorError> {
+        fn drive_speed(&mut self, speed : RadPerSecond) -> Result<(), ActuatorError> {
             // Set drive mode, return mapped error if one occurs
             self.builder.set_drive_mode(StepperDriveMode::ConstVelocity(speed), &mut self.ctrl)?;
-            self.handle_builder().await
+            self.handle_builder()
         }
     }
 // 
@@ -249,7 +270,10 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                 _limit_max: None,
 
                 interruptors : Vec::new(),
-                _intr_reason: None
+                _intr_reason: None,
+
+                last_step: Instant::now(),
+                last_step_time: None
             })
         }
     }
@@ -268,7 +292,10 @@ impl<B : StepperBuilder, C : StepperController> StepperMotor<B, C> {
                 _limit_max: None,
 
                 interruptors : Vec::new(),
-                _intr_reason: None
+                _intr_reason: None,
+                
+                last_step: Instant::now(),
+                last_step_time: None
             })
         }
     }

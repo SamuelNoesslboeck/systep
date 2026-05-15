@@ -2,7 +2,7 @@
 
 use syact::{AdvancedActuator, SyncActuator};
 use systep::builder::{ComplexBuilder, StartStopBuilder};
-use systep::{MicroSteps, StepperActuator, StepperConfig, StepperController, StepperData, StepperMotor};
+use systep::{StepperConfig, StepperController, StepperData, StepperMotor};
 use syunit::metric::{KgMeter2, NewtonMeters};
 use syunit::{Direction, Factor, Radians, Seconds};
 
@@ -36,8 +36,7 @@ impl SimulatedCtrl {
 }
 
 impl StepperController for SimulatedCtrl {
-    async fn step(&mut self, time : syunit::Seconds) -> Result<(), syact::ActuatorError<syunit::Rotary>> {
-        self.step_list.push(time);
+    fn step(&mut self) -> Result<(), syact::ActuatorError<syunit::Rotary>> {
         Ok(())
     }
 
@@ -54,24 +53,28 @@ impl StepperController for SimulatedCtrl {
     fn data(&self) -> &systep::ControllerData {
         todo!()
     }
+
+    fn delay(&mut self, time : std::time::Duration) {
+        self.step_list.push(Seconds(time.as_secs_f32()));
+    }
 }
 
 pub type StartStopStepper = StepperMotor<StartStopBuilder, SimulatedCtrl>;
 pub type ComplexStepper = StepperMotor<ComplexBuilder, SimulatedCtrl>;
 
-#[tokio::test]
-async fn test__start_stop_builder() {
+#[test]
+fn test__start_stop_builder() {
     let mut motor = StartStopStepper::new_advanced(
         SimulatedCtrl::new(), TEST_DATA, StepperConfig::VOLT12_NO_OVERLOAD
     ).unwrap();
 
-    motor.drive_rel(Radians(1.0), Factor::MAX).await.unwrap();
+    motor.drive_rel(Radians(1.0), Factor::MAX).unwrap();
 
     dbg!(motor.ctrl);
 }
 
-#[tokio::test]
-async fn test__complex_builder() {
+#[test]
+fn test__complex_builder() {
     let mut motor = ComplexStepper::new_advanced(
         SimulatedCtrl::new(), TEST_DATA, StepperConfig::VOLT12_NO_OVERLOAD
     ).unwrap();
@@ -79,7 +82,7 @@ async fn test__complex_builder() {
     // motor.set_microsteps(MicroSteps::HALF).unwrap();
     // motor.apply_gen_force(NewtonMeters(0.1)).unwrap();
     motor.apply_inertia(KgMeter2(0.001)).unwrap();
-    motor.drive_rel(Radians(1.0), Factor::MAX).await.unwrap();
+    motor.drive_rel(Radians(1.0), Factor::MAX).unwrap();
 
     dbg!(motor.builder);
     dbg!(motor.ctrl);
