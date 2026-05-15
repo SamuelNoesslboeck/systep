@@ -102,6 +102,12 @@ pub trait StepperBuilder : Iterator<Item = Seconds> {
         fn set_jolt_max(&mut self, jolt_opt : Option<RadPerSecond3>) -> Result<(), ActuatorError>;
     // 
 
+    // Safety-Factor
+        fn safety_fac(&self) -> Factor;
+
+        fn set_safety_fac(&mut self, fac : Factor);
+    // 
+
     // Regulation
         /// Returns the current `DriveMode`
         fn drive_mode(&self) -> &StepperDriveMode;

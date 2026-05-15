@@ -70,6 +70,8 @@ fn test__start_stop_builder() {
 
     motor.drive_rel(Radians(1.0), Factor::MAX).unwrap();
 
+    dbg!(motor.builder.velocity_possible());
+
     dbg!(motor.ctrl);
 }
 
@@ -81,8 +83,11 @@ fn test__complex_builder() {
 
     // motor.set_microsteps(MicroSteps::HALF).unwrap();
     // motor.apply_gen_force(NewtonMeters(0.1)).unwrap();
-    motor.apply_inertia(KgMeter2(0.001)).unwrap();
+    // motor.apply_inertia(KgMeter2(0.001)).unwrap();
     motor.drive_rel(Radians(1.0), Factor::MAX).unwrap();
+
+    dbg!(motor.builder.velocity_cap());
+    dbg!(motor.builder.velocity_possible());
 
     dbg!(motor.builder);
     dbg!(motor.ctrl);

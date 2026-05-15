@@ -241,7 +241,8 @@ impl StepperData {
         /// Maximum speed for a stepper motor where it can be guarantied that it works properly
         #[inline(always)]
         pub fn velocity_max(&self, voltage : f32) -> RadPerSecond {
-            RadPerSecond(PI * voltage / self.default_current / self.inductance / self.number_steps as f32)
+            RadPerSecond(2.0 * voltage / (self.number_steps as f32 * self.inductance * self.default_current))
+            // RadPerSecond(PI * voltage / self.default_current / self.inductance / self.number_steps as f32)
         }
 
         /// Returns the start-stop-velocity for a stepper motor

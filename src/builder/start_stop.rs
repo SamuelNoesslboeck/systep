@@ -36,6 +36,8 @@ pub struct StartStopBuilder {
     _acceleration_max : Option<RadPerSecond2>,
     _jolt_max : Option<RadPerSecond3>,
 
+    _safety_fac : Factor,
+
     _microsteps : MicroSteps,   
     _step_angle : Radians, 
     _direction : Direction,
@@ -57,7 +59,7 @@ impl StartStopBuilder {
         Ok(())
     }
 
-    // RadPerSecond2 helper
+    /* Acceleration Helpers */
         /// Returns the maximum acceleration that can be reached when using the maximum jolt specified
         /// 
         /// ### Option
@@ -76,7 +78,7 @@ impl StartStopBuilder {
         }
     // 
 
-    // RadPerSecond helpers
+    /* Velocity helpers */
         /// The maximum velocity that can be reached with the specified acceleration (will result in infinity if no limits are set)
         pub fn velocity_by_max_acceleration(&self) -> RadPerSecond {
             sykin::kin2::velocity_for_distance_no_vel0::<Rotary>(self.step_angle(), self.acceleration_allowed())
@@ -88,9 +90,9 @@ impl StartStopBuilder {
                 self._velocity_max.unwrap_or(RadPerSecond::INFINITY)
             ).min(
                 self.velocity_by_max_acceleration()
-            )
+            ) * self._safety_fac    // Apply safety factor
         }
-    //
+    /**/
 }
 
 // The iterator yields the time values for the stepper motor
@@ -147,7 +149,7 @@ impl StepperBuilder for StartStopBuilder {
         }
     // 
 
-    // RadPerSecond
+    /* Velocity */
         fn velocity(&self) -> RadPerSecond {
             self._velocity
         }
@@ -170,9 +172,9 @@ impl StepperBuilder for StartStopBuilder {
                 Ok(())
             }
         }
-    //
+    /**/
 
-    // RadPerSecond2
+    /* Acceleration */
         #[inline]
         fn acceleration_max(&self) -> Option<RadPerSecond2> {
             self._acceleration_max   
@@ -191,9 +193,9 @@ impl StepperBuilder for StartStopBuilder {
                 Ok(())
             }
         }
-    // 
+    /**/
 
-    // RadPerSecond3 
+    /* Jolt */
         #[inline]
         fn jolt_max(&self) -> Option<RadPerSecond3> {
             self._jolt_max
@@ -212,7 +214,17 @@ impl StepperBuilder for StartStopBuilder {
                 Ok(())
             }
         }
-    // 
+    /**/
+
+    /* Safety factor */
+        fn safety_fac(&self) -> Factor {
+            self._safety_fac
+        }
+
+        fn set_safety_fac(&mut self, fac : Factor) {
+            self._safety_fac = fac;
+        }
+    /**/
     
     #[inline]
     fn drive_mode(&self) -> &StepperDriveMode {
@@ -278,6 +290,8 @@ impl StepperBuilder for StartStopBuilder {
                     _velocity_max: None,
                     _acceleration_max: None,
                     _jolt_max: None,
+
+                    _safety_fac: Factor::MAX,
     
                     _step_angle: consts.step_angle(MicroSteps::default()),
                     _direction: Direction::default(),

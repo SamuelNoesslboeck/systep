@@ -282,7 +282,7 @@ impl StepperBuilder for FreeBuilder {
         }
     /**/
 
-    // RadPerSecond3 
+    /* Jolt */
         #[inline]
         fn jolt_max(&self) -> Option<RadPerSecond3> {
             self._jolt_max
@@ -301,7 +301,17 @@ impl StepperBuilder for FreeBuilder {
                 Ok(())
             }
         }
-    // 
+    /**/
+
+    /* Safety factor */
+        fn safety_fac(&self) -> Factor {
+            panic!("=> No safety factor can be defined for free builders!");
+        }
+
+        fn set_safety_fac(&mut self, _fac : Factor) {
+            panic!("=> No safety factor can be defined for free builders!");
+        }
+    /**/
 
     fn drive_mode(&self) -> &StepperDriveMode {
         &self.mode

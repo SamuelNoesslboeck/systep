@@ -9,6 +9,9 @@ use syact::data::ActuatorVars;
 use crate::{MicroSteps, StepperConfig, StepperController, StepperData};
 use crate::builder::{AdvancedStepperBuilder, StepperDriveMode, StepperBuilder, ActuatorError, DEFAULT_MAX_SPEED_LEVEL};
 
+/// Default safety factor for complex builders
+pub const SAFETY_FAC_COMP_DEF : Factor = unsafe { Factor::new_unchecked(0.8) };
+
 /// ########################
 /// #    ComplexBuilder    #
 /// ########################
@@ -28,6 +31,8 @@ pub struct ComplexBuilder {
     _velocity_max : Option<RadPerSecond>,
     _acceleration_max : Option<RadPerSecond2>,
     _jolt_max : Option<RadPerSecond3>,
+
+    _safety_fac : Factor,
 
     // Cache
     last_accel : RadPerSecond2,
@@ -129,6 +134,7 @@ impl ComplexBuilder {
             .map(|i| self.speed_levels[i])
             .unwrap_or(RadPerSecond::ZERO);
 
+        // Target velocity is greater than the curret => Accelerate
         if vel_tar > self.velocity_current() {
             // Desired velocity is greater than the current speed, increasing speed level if possible
             if let Some(&time) = self.times.get(self.current_speed_level) {
@@ -137,6 +143,7 @@ impl ComplexBuilder {
             } else {
                 Err(ActuatorError::VelocityTooHigh(vel_tar, *self.speed_levels.last().unwrap_or(&RadPerSecond::ZERO)))
             }
+
         } else if (vel_tar < vel_below) | ((vel_tar == RadPerSecond::ZERO) & (self.current_speed_level > 0)) {
             // Desired velocity is smaller than the speed level BELOW, meaning that it is out of range of this speed level
             self.current_speed_level = self.current_speed_level.saturating_sub(1);
@@ -162,6 +169,7 @@ impl ComplexBuilder {
         pub fn velocity_cap(&self) -> RadPerSecond {
             self._velocity_max.unwrap_or(RadPerSecond::INFINITY)
                 .min(self.consts().velocity_max(self.config().voltage))
+            * self._safety_fac    // Applying safety factor
         }
 
         /// The maximum velocity that is currently possible, defined by numerous factors like maximum jolt, acceleration, velocity and start-stop mechanics
@@ -177,7 +185,12 @@ impl ComplexBuilder {
         pub fn acceleration_possible(&self, velocity_current : RadPerSecond) -> Result<RadPerSecond2, ActuatorError> {
             self.consts().acceleration_max_for_velocity(self.vars(), self.config(), velocity_current, self.direction())
                 .ok_or(ActuatorError::Overload)
-                .map(|accel| accel.min(self.acceleration_max().unwrap_or(RadPerSecond2::INFINITY)))
+                .map(|accel|    // Apply safety factor
+                    accel * self._safety_fac
+                )
+                .map(|accel|    // Check against user defined max accel
+                    accel.min(self.acceleration_max().unwrap_or(RadPerSecond2::INFINITY))
+                )
         }
     // 
 }
@@ -190,6 +203,8 @@ impl Iterator for ComplexBuilder {
             StepperDriveMode::ConstVelocity(velocity ) => self.goto_velocity(velocity).ok(),
             StepperDriveMode::ConstFactor(factor, _) => self.goto_velocity(self.velocity_possible() * factor).ok(),
             StepperDriveMode::FixedDistance(_, _, factor) => {
+                // TODO: Implement exit velocity code!!!
+
                 self.distance_counter += 1;
 
                 // Special case with only one node
@@ -197,10 +212,16 @@ impl Iterator for ComplexBuilder {
                     return self.times.first().map(|v| *v);
                 }
 
+                // "Tip of the mountain" - code
+                // Makes sure, that the speed level is held for another step if the distance is an uneven amount of steps
                 if ((self.distance_counter + self.current_speed_level as u64) == self.distance) & ((self.distance % 2) == 1) {
                     Some(self.speed_levels[self.current_speed_level.saturating_sub(1)])
+
+                // Downward acceleration
                 } else if (self.distance_counter + self.current_speed_level as u64) > self.distance {
-                    self.goto_velocity(RadPerSecond::ZERO).ok()
+                    self.goto_velocity(RadPerSecond::ZERO).ok()     // TODO: Implement exit velocity code
+                
+                // If no special case has been found, just go to target velocity
                 } else {
                     self.goto_velocity(self.velocity_possible() * factor).ok()
                 }
@@ -292,7 +313,7 @@ impl StepperBuilder for ComplexBuilder {
         }
     // 
 
-    // RadPerSecond3 
+    /* Jolt */
         #[inline]
         fn jolt_max(&self) -> Option<RadPerSecond3> {
             self._jolt_max
@@ -311,7 +332,17 @@ impl StepperBuilder for ComplexBuilder {
                 Ok(())
             }
         }
-    // 
+    /**/
+
+    /* Safety factor */
+        fn safety_fac(&self) -> Factor {
+            self._safety_fac
+        }
+
+        fn set_safety_fac(&mut self, fac : Factor) {
+            self._safety_fac = fac;
+        }
+    /**/
 
     fn drive_mode(&self) -> &StepperDriveMode {
         &self.mode
@@ -348,6 +379,8 @@ impl StepperBuilder for ComplexBuilder {
                 if velocity_exit > self.velocity_possible() {
                     return Err(ActuatorError::VelocityTooHigh(velocity_exit, self.velocity_possible()))
                 }
+
+                // TODO: Calculate in exit velocity!
 
                 self.distance = self._consts.steps_from_angle_abs(rel_dist, self._microsteps);
                 self.distance_counter = 0;
@@ -386,6 +419,8 @@ impl AdvancedStepperBuilder for ComplexBuilder {
                 _velocity_max: None,
                 _acceleration_max: None,
                 _jolt_max: None,
+
+                _safety_fac: SAFETY_FAC_COMP_DEF,
 
                 _microsteps: MicroSteps::default(),
 
