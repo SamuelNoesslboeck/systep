@@ -4,16 +4,16 @@ use syact::{AdvancedActuator, SyncActuator};
 use systep::builder::{ComplexBuilder, StartStopBuilder};
 use systep::{StepperConfig, StepperController, StepperData, StepperMotor};
 use syunit::metric::{KgMeter2, NewtonMeters};
-use syunit::{Direction, Factor, Radians, Seconds};
+use syunit::{Direction, Factor, RadPerSecond3, Radians, Seconds};
 
 pub const TEST_DATA : StepperData = StepperData {
-    default_current: 1.0,
-    inductance: 0.004,
+    current_rated: 1.0,
+    coil_inductance: 0.004,
     inertia_motor: KgMeter2(0.000_01),
 
-    number_steps: 200,
-    resistance: 4.0,
-    torque_stall: NewtonMeters(0.40)
+    steps_per_rev: 200,
+    coil_resistance: 4.0,
+    torque_rated: NewtonMeters(0.40)
 }; 
 
 #[derive(Debug)]
@@ -84,6 +84,7 @@ fn test__complex_builder() {
     // motor.set_microsteps(MicroSteps::HALF).unwrap();
     // motor.apply_gen_force(NewtonMeters(0.1)).unwrap();
     // motor.apply_inertia(KgMeter2(0.001)).unwrap();
+    motor.set_jolt_max(Some(RadPerSecond3(10_000.0))).unwrap();
     motor.drive_rel(Radians(1.0), Factor::MAX).unwrap();
 
     dbg!(motor.builder.velocity_cap());

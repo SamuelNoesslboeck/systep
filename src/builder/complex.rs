@@ -16,27 +16,29 @@ pub const SAFETY_FAC_COMP_DEF : Factor = unsafe { Factor::new_unchecked(0.8) };
 /// #    ComplexBuilder    #
 /// ########################
 /// 
-/// A more complex builder that introduces speed levels 
+/// A more complex builder that introduces dynamic speed levels
 /// 
 /// - High movements speeds
 /// - Perfect for microstepping
-/// 
 #[derive(Debug)]
 pub struct ComplexBuilder {
-    _consts : StepperData,
-    _vars : ActuatorVars,
-    _config : StepperConfig,
+    /* Data */
+        _consts : StepperData,
+        _vars : ActuatorVars,
+        _config : StepperConfig,
+    /**/
 
-    // Limits
-    _velocity_max : Option<RadPerSecond>,
-    _acceleration_max : Option<RadPerSecond2>,
-    _jolt_max : Option<RadPerSecond3>,
+    /* User-Defined */
+        _velocity_max : Option<RadPerSecond>,
+        _acceleration_max : Option<RadPerSecond2>,
+        _jolt_max : Option<RadPerSecond3>,
 
-    _safety_fac : Factor,
+        _safety_fac : Factor,
 
-    // Cache
-    last_accel : RadPerSecond2,
-    _microsteps : MicroSteps,
+        _microsteps : MicroSteps,
+    /**/
+
+    /// Calculated from microsteps, DO NOT ALTER DIRECTLY
     _step_angle : Radians, 
     _dir : Direction,
 
@@ -70,6 +72,7 @@ impl ComplexBuilder {
         let mut times : Vec<Seconds> = Vec::new();
 
         let mut velocity_current = RadPerSecond::ZERO;
+        let mut last_accel = RadPerSecond2::ZERO;       // The last acceleration used
 
         // Iterate to max speed level or until the cap is reached
         for _ in 0 .. max_speed_level {
@@ -82,10 +85,10 @@ impl ComplexBuilder {
             // Consider maximum jolt if set
             if let Some(jolt_max) = self.jolt_max() {
                 // Only correct if the acceleration has exeeded the jolt value
-                if ((accel_possible - self.last_accel) / move_time) > jolt_max {
+                if ((accel_possible - last_accel) / move_time) > jolt_max {
                     // Heavy calculation of a cubic formula
-                    move_time = sykin::kin3::time_for_distance::<Rotary>(self.step_angle(), velocity_current, self.last_accel, jolt_max);
-                    accel_possible = self.last_accel + jolt_max * move_time;
+                    move_time = sykin::kin3::time_for_distance::<Rotary>(self.step_angle(), velocity_current, last_accel, jolt_max);
+                    accel_possible = last_accel + jolt_max * move_time;
                 }
             }
 
@@ -111,7 +114,8 @@ impl ComplexBuilder {
             time_sums.push(*time_sums.last().unwrap_or(&Seconds::ZERO) + move_time);
             times.push(move_time);
 
-            self.last_accel = accel_possible;
+            
+            last_accel = accel_possible;
         }
 
         // Update class values
@@ -180,7 +184,7 @@ impl ComplexBuilder {
         }
     // 
 
-    // RadPerSecond2
+    /* Acceleration */
         /// Returns the maximum acceleration possible by the motor or allowed by to user, depending on which one is lower
         pub fn acceleration_possible(&self, velocity_current : RadPerSecond) -> Result<RadPerSecond2, ActuatorError> {
             self.consts().acceleration_max_for_velocity(self.vars(), self.config(), velocity_current, self.direction())
@@ -192,7 +196,7 @@ impl ComplexBuilder {
                     accel.min(self.acceleration_max().unwrap_or(RadPerSecond2::INFINITY))
                 )
         }
-    // 
+    /**/
 }
 
 impl Iterator for ComplexBuilder {
@@ -424,7 +428,6 @@ impl AdvancedStepperBuilder for ComplexBuilder {
 
                 _microsteps: MicroSteps::default(),
 
-                last_accel: RadPerSecond2::ZERO,
                 distance: 0,
                 distance_counter: 0,
                 _step_angle: consts.step_angle(MicroSteps::default()),

@@ -1,4 +1,4 @@
-use core::f32::consts::PI;
+use core::f32::consts::{E, PI};
 use core::ops::Mul;
 use core::str::FromStr;
 
@@ -134,86 +134,142 @@ pub struct ControllerData {
 /// ``` 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StepperData {
-    /// Max phase current [Unit A]
-    pub default_current : f32,
-    /// Motor inductence [Unit H]
-    pub inductance : f32,
-    /// Coil resistance [Unit Ohm]
-    pub resistance : f32,
+    /// Max current per phase (*Unit A*)
+    pub current_rated : f32,
+    /// Motor inductance (*Unit H*)
+    pub coil_inductance : f32,
+    /// Coil resistance (*Unit Ohm*)
+    pub coil_resistance : f32,
 
-    /// Step count per revolution [Unit (1)]
-    pub number_steps : u64,
-    /// Stall torque [Unit Nm]
-    pub torque_stall : NewtonMeters,
-    /// Inhertia moment [Unit kg*m^2]
+    /// Step count per revolution (*Unit (1)*)
+    pub steps_per_rev : u64,
+    /// Rated torque (reached when the rated current is performed)
+    pub torque_rated : NewtonMeters,
+    /// Inhertia moment 
     pub inertia_motor : KgMeter2
 }
 
 impl StepperData {
-    // Constants
+    /* Data for specific motors */
         /// ### Stepper motor 17HE15-1504S
         /// Values for standard stepper motor
         pub const MOT_17HE15_1504S : Self = Self {
-            default_current: 1.5, 
-            inductance: 0.004, 
-            resistance: 2.3,
-            number_steps: 200, 
-            torque_stall: NewtonMeters(0.42), 
+            current_rated: 1.5, 
+            coil_inductance: 0.004, 
+            coil_resistance: 2.3,
+            steps_per_rev: 200, 
+            torque_rated: NewtonMeters(0.42), 
             inertia_motor: KgMeter2(0.000_005_7)
         }; 
 
         /// ### Stepper motor 23HS45_4204S
         /// Values for standard stepper motor, see <https://www.omc-stepperonline.com/download/23HS45-4204S.pdf>
         pub const MOT_23HS45_4204S : Self = Self {
-            default_current: 3.8,
-            inductance: 0.0034,
-            resistance: 0.88,
-            number_steps: 400,
-            torque_stall: NewtonMeters(3.0),
+            current_rated: 3.8,
+            coil_inductance: 0.0034,
+            coil_resistance: 0.88,
+            steps_per_rev: 400,
+            torque_rated: NewtonMeters(3.0),
             inertia_motor: KgMeter2(0.000_068)
         };
-    // 
+    /**/
 
-    // Amperage
-        /// Maximum overload force with the given overload (or underload) voltage `u`
-        #[inline]
-        pub fn torque_overload_max(&self, voltage : f32) -> NewtonMeters {
-            self.torque_stall * voltage / self.resistance / self.default_current
+    /* Descriptive Constants */
+        /// The charging/discharging constant
+        #[inline(always)]
+        pub const fn tau(&self) -> Seconds {
+            Seconds(self.coil_inductance / self.coil_resistance)
         }
 
-        /// Torque created with the given overload (or underload) current `i`
-        /// 
-        /// ## Option
-        ///
-        /// Uses the default current if the given option is `None`
-        #[inline]
-        pub fn torque_overload(&self, current_opt : Option<f32>) -> NewtonMeters {
-            self.torque_stall * current_opt.unwrap_or(self.default_current) / self.default_current
+        /// The torque constant of the motor in Nm / Amperes
+        pub const fn torque_const(&self) -> f32 {
+            self.torque_rated.0 / self.current_rated
         }
-    // 
+    /**/
 
-    // Torque
-        /// Returns the current torque [Force] that a DC-Motor can produce when driving with the 
-        /// speed `velocity ` and the voltage `u` in Volts
+    /* Current */    
+        /// Maximum current in amperes that can be configured with the given voltage
         /// 
-        /// # Panics
-        /// 
-        /// Panics if the given velocity is not finite
-        pub fn torque_dyn(&self, mut velocity : RadPerSecond, config : &StepperConfig) -> NewtonMeters {
-            velocity = velocity.abs();
+        /// Note that this is **not the rated current** and it might damage your motor, be sure
+        /// to configure your stepper driver to the [Self::rated_current]
+        #[inline]
+        pub const fn current_max(&self, voltage : f32) -> f32 {
+            voltage / self.coil_resistance
+        }
+
+        /// Peak current in amperes that is reached during the movement process 
+        pub fn current_peak(&self, mut velocity : RadPerSecond, config : &StepperConfig) -> f32 {
+            velocity = velocity.abs();  // Direction does not matter to this formula
 
             if !velocity.is_finite() {
                 panic!("Bad velocity ! {}", velocity);
             }
             
             if velocity == RadPerSecond::ZERO {
-                return self.torque_overload(config.max_current);
+                return self.current_max(config.voltage);
             }
 
-            let time = self.full_step_time(velocity);
-            let pow = core::f32::consts::E.powf(time / self.tau(config.voltage));
+            let t_s = self.full_step_time(velocity);
+            let e_pow = E.powf(-t_s / self.tau());
 
-            self.torque_overload(config.max_current) * (pow - 1.0) / (pow + 1.0)
+            self.current_max(config.voltage) * (1.0 - e_pow) / (1.0 + e_pow)
+        }
+
+        /// Average coil current for the given velocity and configuration
+        pub fn current_avg(&self, mut velocity : RadPerSecond, config : &StepperConfig) -> f32 {
+            // Code from current_peak copied for performance reasons, they share many variables!
+            velocity = velocity.abs();  // Direction does not matter to this formula
+
+            // Either the user has a special configured current ratio, or the rated one is used
+            // => Unregulated cases are not handled, because they are unsafe and damage the motor
+            let current_setting = config.max_current.unwrap_or(self.current_rated);
+
+            if !velocity.is_finite() {
+                panic!("Bad velocity ! {}", velocity);
+            }
+            
+            if velocity == RadPerSecond::ZERO {
+                return self.current_max(config.voltage).min(current_setting);
+            }
+
+            let t_s = self.full_step_time(velocity);
+            let e_pow = E.powf(-t_s / self.tau());
+
+            // Current values
+            let current_max = self.current_max(config.voltage);
+            let current_peak = current_max * (1.0 - e_pow) / (1.0 + e_pow);
+
+            // Current is cut off by driver
+            if current_peak > current_setting {
+                // Overflow time (time the current would be higher than the set one)
+                let t_ov = - self.tau() * ((current_max - current_setting) / (current_max + current_setting)).ln();
+                let e_pow_mod = E.powf(-t_ov / self.tau());
+
+                // Average coil current in non-overflow times
+                let ic_avg = current_max - self.tau() / t_ov * (1.0 - e_pow_mod) * (current_max + current_setting);
+
+                (ic_avg * t_ov + current_setting * (t_s - t_ov)) / t_s
+            // No intervention from driver
+            } else {
+                current_max - self.tau() / t_s * (1.0 - e_pow) * (current_max + current_peak)
+            }
+        }
+    /**/
+
+    /* Torque */
+        /// Maximum torque (stall torque) of the motor with the given current
+        /// 
+        /// ## Option
+        ///
+        /// Uses the **rated** current if the given option is `None`
+        #[inline]
+        pub fn torque_stall(&self, current_opt : Option<f32>) -> NewtonMeters {
+            self.torque_rated * current_opt.unwrap_or(self.current_rated) / self.current_rated
+        }
+
+        /// Average torque for the given velocity with the given stepper configuration
+        pub fn torque_avg(&self, velocity : RadPerSecond, config : &StepperConfig) -> NewtonMeters {
+            NewtonMeters(self.torque_const() * self.current_avg(velocity, config))
         }
     // 
 
@@ -221,39 +277,32 @@ impl StepperData {
         /// Returns the maximum acceleration that can be reached in stall
         #[inline]
         pub fn acceleration_max_stall(&self, vars : &ActuatorVars, dir : Direction) -> Option<RadPerSecond2> {
-            vars.force_after_load(self.torque_stall, dir).map(|f| f / vars.inertia_after_load(self.inertia_motor))
+            vars.force_after_load(self.torque_rated, dir).map(|f| f / vars.inertia_after_load(self.inertia_motor))
         }
 
         /// Returns the maximum acceleration that can be reached 
         #[inline]
         pub fn acceleration_max_for_velocity(&self, vars : &ActuatorVars, config : &StepperConfig, velocity : RadPerSecond, dir : Direction) -> Option<RadPerSecond2> {
-            vars.force_after_load(self.torque_dyn(velocity , config), dir).map(|f| f / vars.inertia_after_load(self.inertia_motor))
+            vars.force_after_load(self.torque_avg(velocity, config), dir).map(|f| f / vars.inertia_after_load(self.inertia_motor))
         }
     // 
 
-    // U::Velocity & Inductance
-        /// The inductivity constant [Unit s]
-        #[inline(always)]
-        pub fn tau(&self, voltage : f32) -> Seconds {
-            Seconds(self.inductance * self.default_current / voltage)
-        }
-
+    // Velocity
         /// Maximum speed for a stepper motor where it can be guarantied that it works properly
         #[inline(always)]
         pub fn velocity_max(&self, voltage : f32) -> RadPerSecond {
-            RadPerSecond(2.0 * voltage / (self.number_steps as f32 * self.inductance * self.default_current))
-            // RadPerSecond(PI * voltage / self.default_current / self.inductance / self.number_steps as f32)
+            RadPerSecond(4.0 * PI * voltage / (self.steps_per_rev as f32 * self.coil_inductance * self.current_rated))
         }
 
         /// Returns the start-stop-velocity for a stepper motor
         pub fn velocity_start_stop(&self, vars : &ActuatorVars, config : &StepperConfig, microsteps : MicroSteps) -> Option<RadPerSecond> {
-            vars.force_after_load_lower(self.torque_overload(config.max_current)).map(|torque| {
-                RadPerSecond((torque.0 / vars.inertia_after_load(self.inertia_motor).0 * core::f32::consts::PI / (self.number_steps * microsteps) as f32).sqrt())
+            vars.force_after_load_lower(self.torque_stall(config.max_current)).map(|torque| {
+                RadPerSecond((torque.0 / vars.inertia_after_load(self.inertia_motor).0 * core::f32::consts::PI / (self.steps_per_rev * microsteps) as f32).sqrt())
             })
         }
     // 
 
-    /// U::Velocity for time per step [Unit 1/s]
+    /// Velocity for time per step [Unit 1/s]
     /// 
     /// # Panics
     /// 
@@ -278,13 +327,13 @@ impl StepperData {
         /// - `micro` is the amount of microsteps per full step
         #[inline(always)]
         pub fn step_angle(&self, microsteps : MicroSteps) -> Radians {
-            self.full_step_angle() / microsteps.as_u8() as f32
+            Radians(self.full_step_angle().0 / microsteps.as_u8() as f32)
         }
 
         /// A full step angle of the motor, ignoring microstepping
         #[inline(always)]
-        pub fn full_step_angle(&self) -> Radians {
-            Radians(2.0 * PI / self.number_steps as f32)
+        pub const fn full_step_angle(&self) -> Radians {
+            Radians(2.0 * PI / self.steps_per_rev as f32)
         }
 
         /// Time per step for the given velocity 
